@@ -31,9 +31,8 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // var bufferScene = new THREE.Scene();
-        // var renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter })
-
+        var bufferScene = new THREE.Scene();
+        var renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter });
         var geometry = new THREE.PlaneGeometry(20, 10);
 
         let uniforms = {
@@ -43,11 +42,23 @@
         var material = new THREE.ShaderMaterial({
             uniforms: uniforms,
             fragmentShader: noiseFragmentShader(),
-            vertexShader: noiseVertexShader()
+            vertexShader: standardVertexShader()
         })
 
         var quad = new THREE.Mesh(geometry, material);
-        scene.add(quad);
+        bufferScene.add(quad);
+
+        var renderMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                tex: { type: 'sampler2D', value: renderTarget.texture }
+            },
+            fragmentShader: pixelateFragmentShader(),
+            vertexShader: standardVertexShader()
+        })
+
+        var finalRenderQuad = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: renderTarget.texture }));
+        // var finalRenderQuad = new THREE.Mesh(geometry, renderMaterial);
+        scene.add(finalRenderQuad)
 
         camera.position.z = 5;
 
@@ -55,19 +66,33 @@
             time += 0.1;
             quad.material.uniforms.time.value = time;
             requestAnimationFrame(animate);
+            renderer.setRenderTarget(renderTarget);
+            renderer.render(bufferScene, camera);
+            renderer.setRenderTarget(null);
             renderer.render(scene, camera);
         }
         animate();
 
-        function noiseVertexShader() {
+        function standardVertexShader() {
             return `
-                varying lowp vec3 vUv; 
+                varying lowp vec3 vUv;
 
                 void main() {
                     vUv = position;
                     vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
                     gl_Position = projectionMatrix * modelViewPosition; 
                 }`
+        }
+
+        function pixelateFragmentShader() {
+            return `
+                varying lowp vec3 vUv;
+                uniform sampler2D tex;
+
+                void main() {
+                    gl_FragColor = texture2D(tex, vUv.xy);
+                }
+            `
         }
 
         function noiseFragmentShader() {
