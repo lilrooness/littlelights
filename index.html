@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>I am Joseph Frangoudes.</title>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="js/three.js"></script>
+    <script>
+        var time = 1.0;
+        var scene = new THREE.Scene();
+        var camera = new THREE.PerspectiveCamera(
+            75,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+
+        var renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // var bufferScene = new THREE.Scene();
+        // var renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter })
+
+        var geometry = new THREE.PlaneGeometry(20, 10);
+
+        let uniforms = {
+            time: { type: 'float', value: time }
+        }
+
+        var material = new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            fragmentShader: noiseFragmentShader(),
+            vertexShader: noiseVertexShader()
+        })
+
+        var quad = new THREE.Mesh(geometry, material);
+        scene.add(quad);
+
+        camera.position.z = 5;
+
+        function animate() {
+            time += 0.1;
+            quad.material.uniforms.time.value = time;
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        function noiseVertexShader() {
+            return `
+                varying lowp vec3 vUv; 
+
+                void main() {
+                    vUv = position;
+                    vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+                    gl_Position = projectionMatrix * modelViewPosition; 
+                }`
+        }
+
+        function noiseFragmentShader() {
+            return `
+            
+            uniform float time; 
+            varying vec3 vUv;
+            
+            float rand(vec3 n) {
+                // some expression that simulates a random number given some input (I didn't write this bit)
+                return fract(cos(dot(n, vec3(12.9898, 4.1414, 8.5683))) * 43758.5453);
+            }
+
+            float noise(vec3 n) {
+	            vec3 gtl = floor(n);
+	            vec3 pos = smoothstep(vec3(0), vec3(1), fract(n));
+
+	            // back plane grid square gradients
+	            vec3 tlb_grad = vec3(rand(gtl), rand(gtl), rand(gtl));
+	            vec3 trb_grad = vec3(rand(gtl + vec3(1,0,0)), rand(gtl + vec3(1,0,0)), rand(gtl + vec3(1,0,0)));
+	            vec3 blb_grad = vec3(rand(gtl + vec3(0,1,0)), rand(gtl + vec3(0,1,0)), rand(gtl + vec3(0,1,0)));
+	            vec3 brb_grad = vec3(rand(gtl + vec3(1,1,0)), rand(gtl + vec3(1,1,0)), rand(gtl + vec3(1,1,0)));
+	            // front plane grid square gradients
+	            vec3 tlf_grad = vec3(rand(gtl + vec3(0,0,1)), rand(gtl + vec3(0,0,1)), rand(gtl + vec3(0,0,1)));
+	            vec3 trf_grad = vec3(rand(gtl + vec3(1,0,1)), rand(gtl + vec3(1,0,1)), rand(gtl + vec3(1,0,1)));
+	            vec3 blf_grad = vec3(rand(gtl + vec3(0,1,1)), rand(gtl + vec3(0,1,1)), rand(gtl + vec3(0,1,1)));
+	            vec3 brf_grad = vec3(rand(gtl + vec3(1,1,1)), rand(gtl + vec3(1,1,1)), rand(gtl + vec3(1,1,1)));
+
+	            vec3 tlb_offset = vec3(0,0,0);
+	            vec3 trb_offset = vec3(1,0,0);
+	            vec3 blb_offset = vec3(0,1,0);
+	            vec3 brb_offset = vec3(1,1,0);
+
+	            vec3 tlf_offset = vec3(0,0,1);
+	            vec3 trf_offset = vec3(1,0,1);
+	            vec3 blf_offset = vec3(0,1,1);
+	            vec3 brf_offset = vec3(1,1,1);
+
+	            //back plane grid square dot products
+	            float tlb_dot = dot(tlb_grad, pos - tlb_offset);
+	            float trb_dot = dot(trb_grad, pos - trb_offset);
+	            float blb_dot = dot(blb_grad, pos - blb_offset);
+	            float brb_dot = dot(brb_grad, pos - brb_offset);
+	            //front plane grid square dot products
+	            float tlf_dot = dot(tlf_grad, pos - tlf_offset);
+	            float trf_dot = dot(trf_grad, pos - trf_offset);
+	            float blf_dot = dot(blf_grad, pos - blf_offset);
+	            float brf_dot = dot(brf_grad, pos - brf_offset);
+
+	            // interpolated dot products back
+	            float top_edge_back = mix(tlb_dot, trb_dot, pos.x);
+	            float bottom_edge_back =  mix(blb_dot, brb_dot, pos.x);
+
+	            // interpolated dot products front
+	            float top_edge_front = mix(tlf_dot, trf_dot, pos.x);
+	            float bottom_edge_front = mix(blf_dot, brf_dot, pos.x);
+
+	            float front_to_back_top = mix(top_edge_back, top_edge_front, pos.z);
+	            float front_to_back_bottom = mix(bottom_edge_back, bottom_edge_front, pos.z);
+
+	            return mix(front_to_back_top, front_to_back_bottom, pos.y);
+            }
+
+            void main() {
+                	float amplitude = 1.0;
+                	float intensity = 0.0;
+                	for(int i =0; i< 2; i++) {
+                		intensity += noise(vec3(vUv.xy, time / 40.0) * amplitude);
+                		amplitude *= 1.5;
+                	}
+                
+                	intensity*=3.0;
+                
+                	gl_FragColor = vec4(intensity, intensity, intensity, 1.0);
+                }
+            `
+        }
+    </script>
+</body>
+
+</html>
