@@ -17,6 +17,12 @@
 
 <body>
     <script src="js/three.js"></script>
+    <script src="https://threejs.org/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://threejs.org/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://threejs.org/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://threejs.org/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://threejs.org/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://threejs.org/examples/js/postprocessing/UnrealBloomPass.js"></script>
     <script>
         var time = 1.0;
         var scene = new THREE.Scene();
@@ -34,6 +40,7 @@
         var bufferScene = new THREE.Scene();
         var renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter });
         var geometry = new THREE.PlaneGeometry(20, 10);
+        var finalRenderGeometry = new THREE.PlaneGeometry(10, 5);
 
         let uniforms = {
             time: { type: 'float', value: time }
@@ -56,10 +63,18 @@
             vertexShader: standardVertexShader()
         })
 
-        var finalRenderQuad = new THREE.Mesh(geometry, renderMaterial);
+        var finalRenderQuad = new THREE.Mesh(finalRenderGeometry, renderMaterial);
         scene.add(finalRenderQuad)
 
         camera.position.z = 5;
+
+        // var bloomStrength = 1.48;
+        // var bloomRadius = 0.38;
+        // var bloomThreshold = 0;
+        // var bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), bloomStrength, bloomRadius, bloomThreshold);
+        // composer = new THREE.EffectComposer(renderer);
+        // composer.setSize(window.innerWidth, window.innerHeight);
+        // composer.addPass(bloomPass);
 
         function animate() {
             time += 0.1;
@@ -68,6 +83,7 @@
             renderer.setRenderTarget(renderTarget);
             renderer.render(bufferScene, camera);
             renderer.setRenderTarget(null);
+            // composer.render();
             renderer.render(scene, camera);
         }
         animate();
@@ -88,8 +104,23 @@
                 varying vec2 vUv;
                 uniform sampler2D tex;
 
+                vec4 average(vec2 coord, vec2 gridCells) {
+                    vec2 gridCellSize = 1.0/gridCells;
+                    vec2 startPixel = floor(coord / gridCellSize) * gridCellSize;
+                    vec2 endPixel = startPixel + gridCellSize;
+
+                    bvec2 res = lessThan(fract(coord * 400.0 / 4.0), vec2(0.6, 0.6));
+                    if(res.x && res.y) {
+                        return texture2D(tex, startPixel) + texture2D(tex, endPixel) / 2.0;
+                    } else {
+                        return vec4(0.0,0.0,0.0,1.0);
+                    }
+                }
+
                 void main() {
-                    gl_FragColor = texture2D(tex, vUv.xy);
+                    vec4 avg = average(vUv.xy, vec2(100, 100));
+                    vec4 intensity = vec4(step(0.5, avg.x), step(0.5, avg.y), step(0.5, avg.z), step(0.5, avg.w));
+                    gl_FragColor = intensity * vec4(1.0, 0.0, 1.0, 1.0);
                 }
             `
         }
